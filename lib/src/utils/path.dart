@@ -60,4 +60,18 @@ extension PathString on String {
 
     return buffer.toString();
   }
+
+  String canonicalPath() {
+    var location = this;
+
+    if (location.endsWith('?')) {
+      location = location.substring(0, location.length - 1);
+    }
+
+    if (location != '/' && !location.contains('?') && location.endsWith('/')) {
+      location = location.substring(0, location.length - 1);
+    }
+
+    return location.replaceFirst('/?', '?', 1);
+  }
 }

@@ -1,49 +1,115 @@
-import 'package:flutter/widgets.dart';
+import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_web_plugins/url_strategy.dart';
 
-import 'utils/match.dart';
-import 'utils/path.dart';
+import 'nav_data.dart';
+import 'nav_delegate.dart';
+import 'nav_information_parser.dart';
+import 'nav_page.dart';
+import 'nav_provider.dart';
+import 'nav_route.dart';
+import 'utils/unknown_page.dart';
 
-abstract class Nav {
-  final GlobalKey<NavigatorState>? key;
-  final String pattern;
-  final String? name;
-  final List<Nav> children;
-  final _params = <String>[];
-  late final RegExp _regexp;
-
+class Nav implements RouterConfig<List<NavPage>> {
   Nav({
-    this.key,
-    required this.pattern,
-    this.name,
-    this.children = const <Nav>[],
-  })  : assert(pattern == '/' ||
-            (pattern.startsWith('/') && !pattern.endsWith('/'))),
-        assert(
-            children
-                        .where((element) => element.name != null)
-                        .map((e) => e.name)
-                        .toList()
-                        .length ==
-                    children
-                        .where((element) => element.name != null)
-                        .map((e) => e.name)
-                        .toSet()
-                        .length &&
-                children.map((e) => e.pattern).toList().length ==
-                    children.map((e) => e.pattern).toSet().length,
-            'Cannot create pages on Nav.children where pattern == $pattern with the same pattern or name') {
-    _regexp = pattern.toRegExp(_params);
+    GlobalKey<NavigatorState>? key,
+    String initialPath = Navigator.defaultRouteName,
+    Object? initialState,
+    List<NavigatorObserver> observers = const <NavigatorObserver>[],
+    required List<INavRoute> routes,
+    bool usePathUrl = true,
+  }) {
+    final binding = WidgetsFlutterBinding.ensureInitialized();
+
+    if (usePathUrl) {
+      usePathUrlStrategy();
+    }
+
+    key ??= GlobalKey<NavigatorState>();
+
+    routerDelegate = NavDelegate(
+      key,
+      observers,
+      this,
+    );
+
+    routeInformationParser = NavInformationParser(
+      key,
+      observers,
+      routes,
+    );
+
+    var path = binding.platformDispatcher.defaultRouteName;
+
+    if (path == Navigator.defaultRouteName) {
+      path = initialPath;
+    }
+
+    routeInformationProvider = PlatformRouteInformationProvider(
+        initialRouteInformation: RouteInformation(
+      location: path,
+      state: initialState,
+    ));
+  }
+
+  @override
+  final BackButtonDispatcher backButtonDispatcher = RootBackButtonDispatcher();
+
+  @override
+  late final NavInformationParser routeInformationParser;
+
+  @override
+  late final RouteInformationProvider? routeInformationProvider;
+
+  @override
+  late final NavDelegate routerDelegate;
+}
+
+extension NavMethods on Nav {
+  void navigate({required String location, Object? extra}) {
+    final pages = routeInformationParser.getPages(
+      location: location,
+      extra: extra,
+    );
+
+    routerDelegate.setNewRoutePath(pages);
+  }
+
+  Future<T?> push<T>({required String location, Object? extra}) {
+    final page = routeInformationParser
+        .getPages<T>(
+          location: location,
+          extra: extra,
+        )
+        .last;
+
+    if (page is UnknownPage<T>) {
+      return SynchronousFuture(null);
+    }
+
+    return routerDelegate.navigatorKey.currentState!.push(page.createRoute());
+  }
+
+  void pop<T>([T? result]) {
+    final key = routerDelegate.nestedPages?.navigatorKeys.last ??
+        routerDelegate.navigatorKey;
+
+    key.currentState!.pop<T>(result);
   }
 }
 
-extension NavMethods<T extends Nav> on T {
-  Map<String, String>? hasMatch(String location) {
-    final match = _regexp.matchAsPrefix(location);
+extension NavBuildContext on BuildContext {
+  Nav get nav => NavProvider.of(this);
 
-    if (match == null) return null;
+  NavData get navData => (ModalRoute.of(this)!.settings as NavPage).arguments;
 
-    return match.toParams(_params);
+  void navigate({required String location, Object? extra}) {
+    nav.navigate(location: location, extra: extra);
   }
 
-  String getRawPath(Map<String, String> params) => pattern.toPath(params);
+  Future<T?> push<T>({required String location, Object? extra}) {
+    return nav.push(location: location, extra: extra);
+  }
+
+  void pop<T>([T? result]) => Navigator.pop<T>(this, result);
 }

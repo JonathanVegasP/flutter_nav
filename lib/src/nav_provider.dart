@@ -1,24 +1,25 @@
-import 'package:flutter/widgets.dart';
+import 'package:flutter/material.dart';
 
-import 'nav_settings.dart';
+import 'nav.dart';
 
 class NavProvider extends InheritedWidget {
   const NavProvider({
     super.key,
-    required this.settings,
+    required this.nav,
     required super.child,
   });
 
-  final NavSettings settings;
+  final Nav nav;
 
-  static NavSettings of(BuildContext context) {
-    final NavProvider? result = context
-        .getElementForInheritedWidgetOfExactType<NavProvider>()
-        ?.widget as NavProvider?;
-    assert(result != null, 'No NavProvider found in context');
-    return result!.settings;
+  static Nav of(BuildContext context) {
+    final NavProvider? result =
+        context.dependOnInheritedWidgetOfExactType<NavProvider>();
+    assert(result != null, 'No Nav found in context');
+    return result!.nav;
   }
 
   @override
-  bool updateShouldNotify(NavProvider oldWidget) => false;
+  bool updateShouldNotify(NavProvider oldWidget) {
+    return nav != oldWidget.nav;
+  }
 }

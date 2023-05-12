@@ -10,13 +10,13 @@ class MyApp extends StatelessWidget {
 
   final parentKey = GlobalKey<NavigatorState>();
 
-  NavSettings get _nav => nav;
+  Nav get _nav => nav;
 
-  late final nav = NavSettings(
+  late final nav = Nav(
     key: parentKey,
     initialPath: '/page-one',
-    pages: [
-      NavPage(
+    routes: [
+      NavRoute(
         pattern: '/page-one',
         name: 'Page One',
         builder: () {
@@ -39,7 +39,7 @@ class MyApp extends StatelessWidget {
           );
         },
         children: [
-          NavPage(
+          NavRoute(
             pattern: '/page-two',
             name: 'Page Two',
             builder: () => Scaffold(
@@ -58,7 +58,7 @@ class MyApp extends StatelessWidget {
                     const SizedBox(height: 24),
                     ElevatedButton(
                       onPressed: () =>
-                          _nav.navigate(location: '/shell/page-three'),
+                          _nav.navigate(location: '/shell-static/page-three'),
                       child: const Text('Go To Page Three With Shell Static'),
                     ),
                     const SizedBox(height: 24),
@@ -71,7 +71,7 @@ class MyApp extends StatelessWidget {
               ),
             ),
           ),
-          NavPage(
+          NavRoute(
             pattern: '/page-two',
             name: 'Page Two',
             builder: () => Scaffold(
@@ -108,6 +108,7 @@ class MyApp extends StatelessWidget {
       NavShell(
         pattern: '/shell',
         name: 'Shell Type Factory',
+        type: ShellType.factory,
         builder: (child) => Scaffold(
           appBar: AppBar(
             title: const Text('Using Shell Type Factory'),
@@ -118,7 +119,7 @@ class MyApp extends StatelessWidget {
           ),
         ),
         children: [
-          NavPage(
+          NavRoute(
             pattern: '/page-three',
             name: 'Page Three With Shell',
             builder: () => Column(
@@ -140,7 +141,7 @@ class MyApp extends StatelessWidget {
               ],
             ),
             children: [
-              NavPage(
+              NavRoute(
                 /// removes relation with shell
                 key: parentKey,
                 pattern: '/page-four',
@@ -176,11 +177,11 @@ class MyApp extends StatelessWidget {
                   body: Center(
                     child: child,
                   ),
-                  bottomNavigationBar: BottomAppBar(
+                  bottomNavigationBar: const BottomAppBar(
                     height: 32,
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.spaceAround,
-                      children: const [
+                      children: [
                         Icon(Icons.home),
                         Icon(Icons.person),
                         Icon(Icons.settings),
@@ -189,7 +190,7 @@ class MyApp extends StatelessWidget {
                   ),
                 ),
                 children: [
-                  NavPage(
+                  NavRoute(
                     pattern: '/page-five',
                     name: 'Page Five With Nested Shell',
                     builder: () => Column(
@@ -225,7 +226,7 @@ class MyApp extends StatelessWidget {
           ),
         ),
         children: [
-          NavPage(
+          NavRoute(
             pattern: '/page-three',
             name: 'Page Three With Shell',
             builder: () => Column(
@@ -247,7 +248,7 @@ class MyApp extends StatelessWidget {
               ],
             ),
             children: [
-              NavPage(
+              NavRoute(
                 /// removes relation with shell
                 key: parentKey,
                 pattern: '/page-four',
@@ -259,11 +260,11 @@ class MyApp extends StatelessWidget {
                       children: [
                         const Text('Page Four', textAlign: TextAlign.center),
                         const SizedBox(height: 24),
-                        ElevatedButton(
-                          onPressed: () => _nav.navigate(
-                              location:
-                                  '/shell-static/page-three/nested-shell/page-five'),
-                          child: const Text('Go To Page Five'),
+                        Builder(
+                          builder: (context) => ElevatedButton(
+                            onPressed: () => Navigator.pop(context),
+                            child: const Text('Go To Page Five'),
+                          ),
                         ),
                         const SizedBox(height: 24),
                         ElevatedButton(
@@ -284,11 +285,11 @@ class MyApp extends StatelessWidget {
                   body: Center(
                     child: child,
                   ),
-                  bottomNavigationBar: BottomAppBar(
+                  bottomNavigationBar: const BottomAppBar(
                     height: 32,
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.spaceAround,
-                      children: const [
+                      children: [
                         Icon(Icons.home),
                         Icon(Icons.person),
                         Icon(Icons.settings),
@@ -297,7 +298,7 @@ class MyApp extends StatelessWidget {
                   ),
                 ),
                 children: [
-                  NavPage(
+                  NavRoute(
                     pattern: '/page-five',
                     name: 'Page Five With Nested Shell',
                     builder: () => Column(
@@ -305,10 +306,11 @@ class MyApp extends StatelessWidget {
                       children: [
                         const Text('Page Five', textAlign: TextAlign.center),
                         const SizedBox(height: 24),
-                        ElevatedButton(
-                          onPressed: () => _nav.navigate(
-                              location: '/shell-static/page-three/page-four'),
-                          child: const Text('Go Back'),
+                        Builder(
+                          builder: (context) => ElevatedButton(
+                            onPressed: () => Navigator.of(context).pop(),
+                            child: const Text('Go Back'),
+                          ),
                         ),
                       ],
                     ),

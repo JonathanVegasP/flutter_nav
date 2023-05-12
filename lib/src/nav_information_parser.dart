@@ -1,253 +1,208 @@
 import 'package:flutter/foundation.dart';
-import 'package:flutter/widgets.dart';
+import 'package:flutter/material.dart';
 
-import 'enums/shell_type.dart';
-import 'nav.dart';
 import 'nav_data.dart';
 import 'nav_page.dart';
-import 'nav_shell.dart';
+import 'nav_route.dart';
+import 'utils/path.dart';
+import 'utils/unknown_page.dart';
 
-class NavInformationParser extends RouteInformationParser<List<Page<void>>> {
+class NavInformationParser extends RouteInformationParser<List<NavPage>> {
   final GlobalKey<NavigatorState> _key;
-  final List<Nav> _pages;
-  final NavPage _unknownPage;
+  final List<NavigatorObserver> _observers;
+  final List<INavRoute> _routes;
 
-  NavInformationParser(this._key, this._pages, this._unknownPage);
+  NavInformationParser(
+    this._key,
+    this._observers,
+    this._routes,
+  );
 
   @override
-  Future<List<Page<void>>> parseRouteInformation(
+  Future<List<NavPage>> parseRouteInformation(
       RouteInformation routeInformation) {
-    return SynchronousFuture(getPagesByLocation(
-      _canonicalLocation(routeInformation.location!),
-      routeInformation.state,
+    final RouteInformation(:location!, state: extra) = routeInformation;
+    return SynchronousFuture(getPages(
+      location: location.canonicalPath(),
+      extra: extra,
     ));
   }
 
   @override
-  RouteInformation? restoreRouteInformation(List<Page<void>> configuration) {
-    var data = configuration.last.arguments as NavData;
+  RouteInformation? restoreRouteInformation(List<NavPage> configuration) {
+    final NavData(:extra, :url) = configuration.last.arguments;
 
-    if (data.children.isNotEmpty) {
-      data = data.children.first;
-    }
-
-    return RouteInformation(location: data.url, state: data.extra);
+    return RouteInformation(location: url, state: extra);
   }
 }
 
 extension NavInformationParserMethods on NavInformationParser {
-  List<Page<void>> getPagesByLocation(String location, Object? extra) {
-    final loc = Uri.parse(location);
-
-    var pages = _getPagesByLocation(
+  List<NavPage<T>> getPages<T>({required String location, Object? extra}) {
+    final pages = _getPages<T>(
       key: _key,
-      location: loc,
-      pages: _pages,
+      uri: Uri.parse(location),
+      observers: _observers,
+      pages: _routes,
       params: {},
       extra: extra,
     );
 
-    if (pages.isEmpty) {
-      pages = [
-        _unknownPage.toPage(
-          data: NavData(uri: loc, pathParams: const {}, extra: extra),
-        )
-      ];
-    }
+    if (pages.isEmpty) return [UnknownPage()];
 
     return pages;
   }
-
-  String _canonicalLocation(String location) {
-    if (location.endsWith('?')) {
-      location = location.substring(0, location.length - 1);
-    }
-
-    if (location != '/' && !location.contains('?') && location.endsWith('/')) {
-      location = location.substring(0, location.length - 1);
-    }
-
-    return location.replaceFirst('/?', '?', 1);
-  }
 }
 
-List<Page<void>> _getPagesByLocation({
-  required GlobalKey<NavigatorState> key,
-  required Uri location,
-  required List<Nav> pages,
-  required Map<String, String> params,
-  required Object? extra,
-  String parentLocation = '/',
-  List<Page<void>>? rootPages,
-  NavShellBuilder? builder,
-  List<NavData>? childPages,
+List<NavPage<T>> _getPages<T>({
+  required final GlobalKey<NavigatorState> key,
+  required final Uri uri,
+  required final List<NavigatorObserver> observers,
+  required final List<INavRoute> pages,
+  required final Map<String, String> params,
+  required final Object? extra,
+  final String parentLocation = '/',
+  final List<NavPage<T>>? parentPages,
+  final NavShellBuilder? builder,
 }) {
-  final url = location.path.toLowerCase();
+  final path = uri.path.toLowerCase();
 
   for (final page in pages) {
-    final pageParams = page.hasMatch(url);
+    final pageParams = page.hasMatch(path);
 
     if (pageParams == null) continue;
 
-    final path = page.getRawPath(pageParams);
+    final pagePath = page.getRawPath(params);
 
-    String currentLocation;
+    final String currentLocation = switch (parentLocation) {
+      '/' => pagePath,
+      _ => '$parentLocation$pagePath'
+    };
 
-    Uri currentLocationUri;
+    final currentUri = uri.replace(path: currentLocation);
 
-    if (parentLocation == '/') {
-      currentLocation = path;
-    } else if (path == '/') {
-      currentLocation = parentLocation;
-    } else {
-      currentLocation = '$parentLocation$path';
-    }
-
-    currentLocationUri = location.replace(path: currentLocation);
-
-    if (path == url && page is NavPage) {
-      params.addAll(params);
-
-      if (page.key == key) builder = null;
-
-      final data = NavData(
-        uri: currentLocationUri,
-        pathParams: params,
-        extra: extra,
-      );
-
-      final result = page.toPage(
-        data: data,
-        builder: builder,
-      );
-
-      if (rootPages != null && page.key == key) {
-        rootPages.add(result);
-
-        break;
-      }
-
-      childPages?.add(data);
-
-      return [result];
-    } else if (page.children.isNotEmpty) {
-      Uri nextLocation;
-
-      if (path == '/') {
-        nextLocation = location;
-      } else {
-        nextLocation = location.replace(path: url.replaceFirst(path, ''));
-      }
-
-      if (page is NavShell) {
-        final List<Page<void>> currentRootPages = [];
-        final List<Page<void>> nextRootPages;
-        final List<NavData> currentChildPages;
-
-        if (childPages == null) {
-          currentChildPages = [];
-        } else {
-          currentChildPages = childPages;
-        }
-
-        if (rootPages == null) {
-          nextRootPages = currentRootPages;
-        } else {
-          nextRootPages = rootPages;
-        }
-
-        final NavShellBuilder? shellBuilder;
-
-        if (page.type.isFactory) {
-          if (builder == null) {
-            shellBuilder = page.builder;
-          } else {
-            shellBuilder = (child) => builder!(page.builder(child));
-          }
-        } else {
-          shellBuilder = null;
-        }
-
-        final results = _getPagesByLocation(
-          key: key,
-          location: nextLocation,
-          pages: page.children,
-          params: params,
-          extra: extra,
-          parentLocation: currentLocation,
-          builder: shellBuilder,
-          rootPages: nextRootPages,
-          childPages: currentChildPages,
-        );
-
-        if (results.isEmpty) continue;
-
+    switch (page) {
+      case NavRoute(key: final pageKey) when pagePath == path:
         params.addAll(pageParams);
 
-        return [
-          page.toPage(
-            data: NavData(
-              uri: currentLocationUri,
-              pathParams: params,
-              extra: extra,
-            )..children.addAll(currentChildPages),
-            pages: results,
-          ),
-          ...currentRootPages
-        ];
-      } else if (page is NavPage) {
-        final List<Page<void>>? currentRootPages;
-        final NavShellBuilder? shellBuilder;
+        NavShellBuilder? shellBuilder;
 
-        if (page.key == key) {
-          currentRootPages = null;
-          shellBuilder = null;
-          childPages = null;
-        } else {
-          currentRootPages = rootPages;
-          shellBuilder = builder;
-        }
+        if (pageKey != key) shellBuilder = builder;
 
-        final results = _getPagesByLocation(
-          key: key,
-          location: nextLocation,
-          pages: page.children,
-          params: params,
-          extra: extra,
-          parentLocation: currentLocation,
-          rootPages: currentRootPages,
-          builder: shellBuilder,
-          childPages: childPages,
-        );
-
-        if (results.isEmpty && (rootPages == null || rootPages.isEmpty)) {
-          continue;
-        }
-
-        params.addAll(pageParams);
-
-        final data = NavData(
-          uri: currentLocationUri,
+        final data = navData(
+          uri: currentUri,
           pathParams: params,
           extra: extra,
         );
 
-        final result = page.toPage(
-          data: data,
-          builder: builder,
-        );
+        final result = page.toPage<T>(data: data, builder: shellBuilder);
 
-        if (rootPages != null && page.key == key) {
-          rootPages.add(result);
-          rootPages.addAll(results);
+        if (parentPages != null && pageKey == key) {
+          parentPages.add(result);
 
           break;
         }
 
-        childPages?.add(data);
+        return [result];
+      case INavRoute(children: final pageChildren) when pageChildren.isNotEmpty:
+        final Uri nextLocation = switch (pagePath) {
+          '/' => uri,
+          _ => uri.replace(path: path.replaceFirst(pagePath, ''))
+        };
 
-        return [result, ...results];
-      }
+        switch (page) {
+          case NavShell(builder: final pageBuilder):
+            final List<NavPage<T>> currentPages = [];
+            final List<NavPage<T>> currentParentPages = switch (parentPages) {
+              null => currentPages,
+              _ => parentPages,
+            };
+            final NavShellBuilder? shellBuilder = switch (page.type) {
+              ShellType.factory => pageBuilder,
+              _ => null
+            };
+
+            final results = _getPages(
+              key: key,
+              uri: nextLocation,
+              observers: observers,
+              pages: pageChildren,
+              params: params,
+              extra: extra,
+              parentLocation: currentLocation,
+              builder: shellBuilder,
+              parentPages: currentParentPages,
+            );
+
+            if (results.isEmpty) continue;
+
+            params.addAll(pageParams);
+
+            return [
+              page.toPage<T>(
+                data: navData(
+                  uri: currentUri,
+                  pathParams: params,
+                  extra: extra,
+                ),
+                observers: observers,
+                pages: results,
+                parentPages: currentParentPages,
+              ),
+              ...currentPages
+            ];
+          case NavRoute(key: final pageKey, children: final pageChildren):
+            final List<NavPage<T>>? currentParentPages;
+            final NavShellBuilder? shellBuilder;
+
+            switch (pageKey == key) {
+              case true:
+                currentParentPages = null;
+                shellBuilder = null;
+              default:
+                currentParentPages = parentPages;
+                shellBuilder = builder;
+            }
+
+            final results = _getPages<T>(
+              key: key,
+              uri: nextLocation,
+              observers: observers,
+              pages: pageChildren,
+              params: params,
+              extra: extra,
+              parentLocation: currentLocation,
+              parentPages: currentParentPages,
+              builder: shellBuilder,
+            );
+
+            if (results.isEmpty &&
+                (parentPages == null || parentPages.isEmpty)) {
+              continue;
+            }
+
+            params.addAll(pageParams);
+
+            final data = navData(
+              uri: currentUri,
+              pathParams: params,
+              extra: extra,
+            );
+
+            final result = page.toPage<T>(
+              data: data,
+              builder: shellBuilder,
+            );
+
+            if (parentPages != null && pageKey == key) {
+              parentPages.add(result);
+              parentPages.addAll(results);
+
+              break;
+            }
+
+            return [result, ...results];
+        }
+      default:
     }
   }
 

@@ -1,40 +1,28 @@
 import 'package:flutter/foundation.dart';
-import 'package:flutter/widgets.dart';
+import 'package:flutter/material.dart';
 
+import 'nav.dart';
+import 'nav_page.dart';
 import 'nav_provider.dart';
-import 'nav_settings.dart';
 import 'web_transition_delegate.dart';
 
-class NavDelegate extends RouterDelegate<List<Page<void>>>
+class NavDelegate extends RouterDelegate<List<NavPage>>
     with ChangeNotifier, PopNavigatorRouterDelegateMixin {
+  late List<NavPage> _pages;
+  final List<NavigatorObserver> _observers;
+  final Nav _nav;
   @override
   final GlobalKey<NavigatorState> navigatorKey;
-  final List<NavigatorObserver> _observers;
-  final NavSettings _settings;
-  late List<Page<void>> _pages;
+  NestedNavPage? nestedPages;
 
-  NavDelegate(this.navigatorKey, this._observers, this._settings);
-
-  @override
-  Widget build(BuildContext context) {
-    return NavProvider(
-      settings: _settings,
-      child: Navigator(
-        key: navigatorKey,
-        observers: _observers,
-        transitionDelegate: kIsWeb
-            ? const WebTransitionDelegate()
-            : const DefaultTransitionDelegate<dynamic>(),
-        pages: List.unmodifiable(_pages),
-        onPopPage: _onPopPage,
-      ),
-    );
-  }
+  NavDelegate(this.navigatorKey, this._observers, this._nav);
 
   bool _onPopPage(Route route, result) {
     if (!route.didPop(result)) return false;
 
     _pages.removeLast();
+
+    nestedPages?.pages.removeLast();
 
     notifyListeners();
 
@@ -42,26 +30,61 @@ class NavDelegate extends RouterDelegate<List<Page<void>>>
   }
 
   @override
-  List<Page<void>> get currentConfiguration => _pages;
+  Widget build(BuildContext context) {
+    return NavProvider(
+      nav: _nav,
+      child: Navigator(
+        key: navigatorKey,
+        restorationScopeId: 'nav',
+        transitionDelegate: switch (kIsWeb) {
+          true => const WebTransitionDelegate(),
+          _ => const DefaultTransitionDelegate(),
+        },
+        observers: _observers,
+        pages: List.unmodifiable(_pages),
+        onPopPage: _onPopPage,
+      ),
+    );
+  }
 
   @override
-  Future<void> setInitialRoutePath(List<Page<void>> configuration) {
+  List<NavPage> get currentConfiguration {
+    return nestedPages?.pages ?? _pages;
+  }
+
+  @override
+  Future<void> setInitialRoutePath(List<NavPage> configuration) {
+    nestedPages = null;
+
     _pages = configuration;
 
     return SynchronousFuture(null);
   }
 
   @override
-  Future<void> setRestoredRoutePath(List<Page<void>> configuration) {
-    return setInitialRoutePath(configuration);
+  Future<void> setRestoredRoutePath(List<NavPage> configuration) {
+    nestedPages = null;
+
+    _pages = configuration;
+
+    return SynchronousFuture(null);
   }
 
   @override
-  Future<void> setNewRoutePath(List<Page<void>> configuration) {
+  Future<void> setNewRoutePath(List<NavPage> configuration) {
+    nestedPages = null;
+
     _pages = configuration;
 
     notifyListeners();
 
     return SynchronousFuture(null);
+  }
+}
+
+extension NavDelegateMethods on NavDelegate {
+  void notifyNestedNavigator() {
+    // ignore: invalid_use_of_visible_for_testing_member, invalid_use_of_protected_member
+    notifyListeners();
   }
 }
